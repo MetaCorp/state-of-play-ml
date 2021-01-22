@@ -97,11 +97,14 @@ fetchImages = (keyword) => {
 			stream.write(img + '\n\n');
 
 			const filename = "./out/" + keyword + "/" + keyword + "-" + i + ".jpg"
-			if (img && img != "" && img[0] == "d") {
+			if (img && img != "" && img.slice(0, 15) == "data:image/jpeg") {
 				saveBase64Image(img, filename)
 				i++
 			}
-			else if (img && img != null && img[0] == "h") {
+			if (img && img != "" && img.slice(0, 14) == "data:image/png") {
+				// TODO
+			}
+			else if (img && img != null && img.slice(0, 4) == "http") {
 				download(img, filename)
 				i++
 			}
@@ -111,11 +114,8 @@ fetchImages = (keyword) => {
 	})
 }
 
-// fs.rmdir('./out', { recursive: true }, async (err) => {
-// 	if (err) {
-// 		throw err;
-// 	}
 
+const main = async () => {
 	console.log(`${'./out'} is deleted!`);
 	
 	if (!fs.existsSync('./out')){
@@ -127,6 +127,12 @@ fetchImages = (keyword) => {
 		fetchImages(decorations[i])
 		await delay(15000)
 	}
+}
 
+fs.rmdir('./out', { recursive: true }, async (err) => {
+	if (err) {
+		throw err;
+	}
 
-// });
+	main()
+});

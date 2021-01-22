@@ -3,7 +3,7 @@ const Step = ({ isVisible, children }) => (
 )
 
 const Steps = ({ items, step }) => (
-    <ul style={{ textAlign: 'left', minWidth: 570 }}>
+    <ul style={{ textAlign: 'left', minWidth: 710 }}>
         {items.map((item, i) => <Step key={i} isVisible={i <= step}>{item.step}{' '}{item.progress && <span style={{ color: 'grey' }}>{item.progress}%</span>}</Step>)}    
     </ul>
 )

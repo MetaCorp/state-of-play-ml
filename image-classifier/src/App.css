@@ -1,5 +1,6 @@
 .App {
   text-align: center;
+  font: 1.2em "Roboto", sans-serif;
 }
 
 .App-logo {
@@ -20,7 +21,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
+  font-size: calc(16px + 2vmin);
   color: white;
 }
 
@@ -61,4 +62,8 @@ ul li:before {
 li {
   animation: 1s ease-out 0s 1 slideInFromBottom;
   padding: 16px 0;
+}
+
+.MuiSvgIcon-root {
+  font-size: 2.5rem !important;
 }

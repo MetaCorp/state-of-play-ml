@@ -6,7 +6,10 @@ import './App.css';
 
 import Steps from './Steps'
 
-import cx from 'classnames';
+import GetAppIcon from '@material-ui/icons/GetApp';
+import IconButton from '@material-ui/core/IconButton';
+
+import { saveAs } from 'file-saver';
 
 const mobilenet = require('@tensorflow-models/mobilenet');
 
@@ -105,11 +108,46 @@ const App = () => {
     handleTrain(tagList, tags)// to override state that are not yet updated
   }
   
+  const handleLoadImageFromFile = (file) => new Promise((res, rej) => {
+    // console.log({ file })
+    var imgEl = document.createElement('img');
+    var reader  = new FileReader();
+    
+    reader.onload = function() {
+      imgEl.src = reader.result;
+      imgEl.onload = function() {
+        // access image size here 
+        imgEl.width = this.width
+        imgEl.height = this.height
+
+        // console.log({ file2: file })
+
+        res(imgEl)
+      };
+      
+    };
+
+    reader.onerror = function(event) {
+      console.log('REJECT: ', reader.error)
+      rej(reader.error)
+      reader.abort();
+    };
+
+    
+    reader.addEventListener('abort', () => {
+      console.log('REJECT: ')
+      rej()
+      console.error(`Error occurred reading file: ${file.name}`);
+    });
+
+    reader.readAsDataURL(file);
+  })
+  
   const handleTrain = (tagList, tags) => {
     setStep(3)
     setIsTraining(true)
 
-    console.log({ tagList, tags })
+    // console.log({ tagList, tags })
 
     console.log('tags count: ' + tagList.length)
 
@@ -121,53 +159,47 @@ const App = () => {
       
       let imageCount = 0
       
-      tags[tag].map((file) => {
+      tags[tag].map(async (file) => {
 
-        var imgEl = document.createElement('img');
-        var reader  = new FileReader();
-        
-        reader.addEventListener("load", function() {
-          imgEl.src = reader.result;
-          imgEl.onload = function() {
-            // access image size here 
-            imgEl.width = this.width
-            imgEl.height = this.height
+        const imgEl = await handleLoadImageFromFile(file)
 
+        // console.log({ tag, imageCount, imgEl })
 
-            // Get image data from video element
-            const image = tf.browser.fromPixels(imgEl);
-
-            // 'conv_preds' is the logits activation of MobileNet.
-            const activation = net.infer(image, true);// 'conv_preds');
-        
-            // Add current image to classifier
-            knn.addExample(activation, i)
-        
-            // Dispose image when done
-            image.dispose();
-            activation.dispose();
-
-            // setImageCount(imageCount + 1)
-            imageCount++
-            // console.log({ imageCount })
-
-            if (imageCount == tags[tag].length) {
-              console.log('training ' + tag + ' done')
-              tagLoadedCount++
-              console.log('tagLoadedCount: ' + tagLoadedCount + '/' + tagList.length)
-
-              if (tagLoadedCount == tagList.length) {
-                setIsTraining(false)
-                setStep(4)
-
-              }
-            }
-          };
+        if (imgEl) {
+          // console.log({ tag, files: tags[tag], file, imageCount, tagLoadedCount })
+  
+          // Get image data from video element
+          const image = tf.browser.fromPixels(imgEl);
+  
+          // 'conv_preds' is the logits activation of MobileNet.
+          const activation = net.infer(image, true);// 'conv_preds');
+      
+          // Add current image to classifier
+          knn.addExample(activation, i)
+      
+          // Dispose image when done
+          image.dispose();
+          activation.dispose();
+  
           
-        }, false);
-        
-        setIsTrained(true)
-        reader.readAsDataURL(file);
+        }
+
+        // setImageCount(imageCount + 1)
+        imageCount++
+        // console.log({ imageCount })
+
+        if (imageCount === tags[tag].length) {
+          console.log('training ' + tag + ' done')
+          tagLoadedCount++
+          console.log('tagLoadedCount: ' + tagLoadedCount + '/' + tagList.length)
+
+          if (tagLoadedCount === tagList.length) {
+            setIsTraining(false)
+            setIsTrained(true)
+            setStep(4)
+
+          }
+        }
 
       })
     })
@@ -251,10 +283,35 @@ const App = () => {
     }, false);
 
     reader.readAsDataURL(e.dataTransfer.files[0]);
-  }// Step todo :
+  }
+
+  const handleExport = () => {
+    let dataset = knn.getClassifierDataset()
+    var datasetObj = {}
+    Object.keys(dataset).forEach((key) => {
+      let data = dataset[key].dataSync();
+      // use Array.from() so when JSON.stringify() it covert to an array string e.g [0.1,-0.2...] 
+      // instead of object e.g {0:"0.1", 1:"-0.2"...}
+      datasetObj[key] = Array.from(data); 
+    });
+    let jsonStr = JSON.stringify(datasetObj)
+    //can be change to other source
+    const filename = 'model.json'
+
+    var fileToSave = new Blob([jsonStr], {
+      type: 'application/json',
+      name: filename
+    });
+    
+    // Save the file
+    saveAs(fileToSave, filename);
+  }
 
   return (
     <div className="App" onDragOver={e => e.preventDefault()} onDrop={handleDatasetDrop}>
+      {step > 3 && <IconButton style={{ position: 'fixed', top: 20, right: 20, color: 'white' }} onClick={handleExport} >
+        <GetAppIcon />
+      </IconButton>}
       <header className="App-header">
         <Steps
           items={steps}
