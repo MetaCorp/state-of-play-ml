@@ -47,6 +47,8 @@ const App = () => {
     step: "Training...",
     // progress: imageCount / imageTotal * 100
   }, {
+    step: "Finding best K..."
+  }, {
     step: "Drop an image",
   }]);
 
@@ -124,6 +126,8 @@ const App = () => {
 
         res(imgEl)
       };
+
+      // TODO : reject on error
       
     };
 
@@ -196,7 +200,7 @@ const App = () => {
           if (tagLoadedCount === tagList.length) {
             setIsTraining(false)
             setIsTrained(true)
-            setStep(4)
+            handleFindBestK(tagList, tags)
 
           }
         }
@@ -205,7 +209,124 @@ const App = () => {
     })
   }
 
-  const handleImageDrop = e => {
+  const getConfidences = (tagList, result) => {
+    
+    const confidenceList = []
+    const confidences = {};
+
+    Object.keys(result.confidences).map(function(key) {
+      confidenceList.push(tagList[key])
+      confidences[tagList[key]] = result.confidences[key];
+    });
+
+    confidenceList.sort((a, b) => confidences[b] - confidences[a])
+
+    return {
+      confidenceList,
+      confidences
+    }
+  }
+
+  // - results
+  //   - tags
+  //     - Bar
+  //     - files
+  //       - Porte.jpg
+  //       - results
+
+  const handleFindBestK = async (tagList, tags) => {
+    setStep(4)
+
+    const K_COUNT = 15
+
+    const results = []
+
+    for (let i = 0; i < tagList.length; i++) {
+      const tag = tagList[i];
+
+      console.log('finding best k for ' + tag)
+    
+      results.push({
+        tag,
+        files: []
+      })
+
+      for (let j = 0; j < tags[tag].length && j < 40; j++) {
+        const file = tags[tag][j];
+        
+        const imgEl = await handleLoadImageFromFile(file)
+
+        const image = tf.browser.fromPixels(imgEl);
+
+        const activation = net.infer(image, 'conv_preds');
+
+        results[i].files.push({
+          filename: file.name,
+          results: []
+        })
+
+        for (let l = 1; l <= K_COUNT; l++) {
+
+          let k
+          const result = await knn.predictClass(
+            activation,
+            k = l
+          );
+          
+          const { confidenceList, confidences } = getConfidences(tagList, result)
+          
+          results[i].files[j].results.push({
+            confidenceList,
+            confidences
+          })
+          
+        }
+
+        image.dispose();
+        activation.dispose();
+
+      }
+
+    }
+
+    console.log({ results })
+
+    const parsedResults = []
+
+    for (let m = 1; m <= K_COUNT; m++) {
+      let total = 0
+      let count = 0
+
+      results.map(r => {
+        r.files.map(file => {
+
+          // console.log({ filterdConfidenceList: file.results[m - 1].confidenceList.filter(tag => file.results[m - 1].confidences[tag] > 0)})
+
+          if (file.results[m - 1].confidenceList.filter(tag => file.results[m - 1].confidences[tag] > 0).includes(r.tag)) {
+            
+            // console.log({ index: file.results[m - 1].confidenceList.indexOf(r.tag) })
+
+            total += (file.results[m - 1].confidenceList.length - file.results[m - 1].confidenceList.indexOf(r.tag)) / file.results[m - 1].confidenceList.length
+          }
+          
+          count++
+        })
+      })
+
+      console.log({ total, count })
+      
+      parsedResults.push(total / count)
+    }
+
+    console.log({ parsedResults })
+
+    setStep(5)
+
+  }
+
+  const handleImageDrop = async e => {
+    if (step < 5) return
+
     setResultLoading(true)
     setStep(step + 1)
     setSteps([
@@ -214,75 +335,55 @@ const App = () => {
       }
     ])
 
-    var imgEl = document.createElement('img');
+    const imgEl = await handleLoadImageFromFile(e.dataTransfer.files[0])
 
-    var reader  = new FileReader();
-    reader.addEventListener("load", function() {
-      imgEl.src = reader.result;
-      imgEl.onload = async function() {
-        // access image size here 
-        imgEl.width = this.width
-        imgEl.height = this.height
+    // Get image data from video element
+    const image = tf.browser.fromPixels(imgEl);
 
+    // 'conv_preds' is the logits activation of MobileNet.
+    const activation = net.infer(image, 'conv_preds');
 
-        // Get image data from video element
-        const image = tf.browser.fromPixels(imgEl);
+    let k
+    const result = await knn.predictClass(
+      activation,
+      k = 1
+    );
+
+    const { confidenceList, confidences } = getConfidences(tagList, result)
     
-        // 'conv_preds' is the logits activation of MobileNet.
-        const activation = net.infer(image, 'conv_preds');
+    console.log('predict result: ', {
+      label: tagList[result.classIndex],
+      confidences,
+      confidenceList,
+      result
+    })
 
-        const result = await knn.predictClass(activation);
+    
+    setStep(step + 1)
+    setSteps([
+      ...steps, {
+        step: <span>
+          <span>Prédictions :</span>
+          <ul>
+            {confidenceList.filter(confidence => confidences[confidence] >= 0.1).map(tag => <li key={tag}>{tag + ' : ' + confidences[tag]}</li>)}
+          </ul>
+        </span>,
+      }
+    ])
+    setResults([
+      ...results, {
+        label: tagList[result.classIndex],
+        confidences,
+        confidenceList
+      }
+    ])
 
-        const confidenceList = []
-        const confidences = {};
-
-        console.log({ tagList })
-
-        Object.keys(result.confidences).map(function(key, index) {
-          confidenceList.push(tagList[key])
-          confidences[tagList[key]] = result.confidences[key];
-        });
-
-        confidenceList.sort((a, b) => confidences[b] - confidences[a])
-        
-        console.log('predict result: ', {
-          label: tagList[result.classIndex],
-          confidences,
-          confidenceList,
-          result
-        })
-
-        
-        setStep(step + 1)
-        setSteps([
-          ...steps, {
-            step: <span>
-              <span>Prédictions :</span>
-              <ul>
-                {confidenceList.filter(confidence => confidences[confidence] >= 0.1).map(tag => <li key={tag}>{tag + ' : ' + confidences[tag]}</li>)}
-              </ul>
-            </span>,
-          }
-        ])
-        setResults([
-          ...results, {
-            label: tagList[result.classIndex],
-            confidences,
-            confidenceList
-          }
-        ])
-
-        // Dispose image when done
-        image.dispose();
-        activation.dispose();
-        
-        setResultLoading(false)
-        // await sleep(100);
-      };
-
-    }, false);
-
-    reader.readAsDataURL(e.dataTransfer.files[0]);
+    // Dispose image when done
+    image.dispose();
+    activation.dispose();
+    
+    setResultLoading(false)
+    // await sleep(100);
   }
 
   const handleExport = () => {
@@ -317,10 +418,6 @@ const App = () => {
           items={steps}
           step={step}
           />
-        {/* <p>{tagList.length > 0 ? "Dataset loaded" : datasetLoading ? "Loading dataset..." : "drop a folder containing the dataset"}</p> */}
-        {/* {tagList.length > 0 && (isTraining ? <p>Training...</p> : isTrained ? <p>Model trained</p> : <button onClick={handleTrain}>Train</button>)} */}
-        {/* {isTrained && (resultLoading ? "Loading predictions..." : "Drop an image")} */}
-        {/* {result && !resultLoading && <ul>{result.confidenceList.map(tag => <li key={tag}>{tag + ' : ' + result.confidences[tag]}</li>)}</ul>} */}
       </header>
     </div>
   );
